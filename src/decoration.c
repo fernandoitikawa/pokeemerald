@@ -295,7 +295,7 @@ static const struct WindowTemplate sDecorationWindowTemplates[WINDOW_COUNT] =
     }
 };
 
-static const u16 sDecorationMenuPalette[] = INCBIN_U16("graphics/decorations/decoration_menu.gbapal");
+static const u16 sDecorationMenuPalette[] = INCGFX_U16("graphics/decorations/decoration_menu.pal", ".gbapal");
 
 static const struct ListMenuTemplate sDecorationItemsListMenuTemplate =
 {
@@ -434,9 +434,9 @@ static const u16 sDecorShapeSizes[] = {
     [DECORSHAPE_3x2] = 32,
 };
 
-static const u16 sBrendanPalette[] = INCBIN_U16("graphics/decorations/brendan.gbapal");
+static const u16 sBrendanPalette[] = INCGFX_U16("graphics/decorations/brendan.pal", ".gbapal");
 
-static const u16 sMayPalette[] = INCBIN_U16("graphics/decorations/may.gbapal");
+static const u16 sMayPalette[] = INCGFX_U16("graphics/decorations/may.pal", ".gbapal");
 
 static const struct YesNoFuncTable sReturnDecorationYesNoFunctions =
 {
@@ -450,7 +450,7 @@ static const struct YesNoFuncTable sStopPuttingAwayDecorationsYesNoFunctions =
     .noFunc = ContinuePuttingAwayDecorations,
 };
 
-static const u8 sDecorationPuttingAwayCursor[] = INCBIN_U8("graphics/decorations/put_away_cursor.4bpp");
+static const u8 sDecorationPuttingAwayCursor[] = INCGFX_U8("graphics/decorations/put_away_cursor.png", ".4bpp");
 
 static const struct SpritePalette sSpritePal_PuttingAwayCursorBrendan =
 {
@@ -1191,7 +1191,7 @@ static void WarpToInitialPosition(u8 taskId)
 
 static u16 GetDecorationElevation(u8 decoration, u8 tileIndex)
 {
-    u16 elevation = -1;
+    u16 elevation = ELEVATION_INVALID;
     switch (decoration)
     {
     case DECOR_STAND:
@@ -1221,9 +1221,9 @@ static void ShowDecorationOnMap_(u16 mapX, u16 mapY, u8 decWidth, u8 decHeight, 
         {
             x = mapX + i;
             attributes = GetMetatileAttributesById(NUM_TILES_IN_PRIMARY + gDecorations[decoration].tiles[j * decWidth + i]);
-            if (MetatileBehavior_IsSecretBaseImpassable(attributes & METATILE_ATTR_BEHAVIOR_MASK) == TRUE
+            if (MetatileBehavior_IsSecretBaseImpassable(UNPACK_BEHAVIOR(attributes)) == TRUE
              || (gDecorations[decoration].permission != DECORPERM_PASS_FLOOR && (attributes >> METATILE_ATTR_LAYER_SHIFT) != METATILE_LAYER_TYPE_NORMAL))
-                impassableFlag = MAPGRID_COLLISION_MASK;
+                impassableFlag = MAPGRID_IMPASSABLE;
             else
                 impassableFlag = 0;
 
@@ -1234,7 +1234,7 @@ static void ShowDecorationOnMap_(u16 mapX, u16 mapY, u8 decWidth, u8 decHeight, 
                 overlapsWall = 0;
 
             elevation = GetDecorationElevation(gDecorations[decoration].id, j * decWidth + i);
-            if (elevation != 0xFFFF)
+            if (elevation != ELEVATION_INVALID)
                 MapGridSetMetatileEntryAt(x, y, (gDecorations[decoration].tiles[j * decWidth + i] + (NUM_TILES_IN_PRIMARY | overlapsWall)) | impassableFlag | elevation);
             else
                 MapGridSetMetatileIdAt(x, y, (gDecorations[decoration].tiles[j * decWidth + i] + (NUM_TILES_IN_PRIMARY | overlapsWall)) | impassableFlag);
@@ -1514,6 +1514,17 @@ static bool8 IsFloorOrBoardAndHole(u16 behaviorAt, const struct Decoration *deco
     return FALSE;
 }
 
+#ifdef BUGFIX
+#define GetLayerType(tileId) UNPACK_LAYER_TYPE(GetMetatileAttributesById(tileId))
+#else
+// This incompletely extracts the layer type data. The result is that comparisons against any nonzero
+// value in the valid range always have the same result.
+// Because GF only compares against 0 (METATILE_LAYER_TYPE_NORMAL) there are no ill effects and it's possible this
+// is what they intended. We use the named constant for the comparisons, which implies you can use nonzero constants at
+// those locations (which you can't), so to avoid this trap and keep the better documentation this is included as a bug fix.
+#define GetLayerType(tileId) GetMetatileAttributesById(tileId) & METATILE_ATTR_LAYER_MASK
+#endif
+
 static bool8 CanPlaceDecoration(u8 taskId, const struct Decoration *decoration)
 {
     u8 i;
@@ -1538,7 +1549,7 @@ static bool8 CanPlaceDecoration(u8 taskId, const struct Decoration *decoration)
             {
                 curX = gTasks[taskId].tCursorX + j;
                 behaviorAt = MapGridGetMetatileBehaviorAt(curX, curY);
-                layerType = GetMetatileAttributesById(NUM_TILES_IN_PRIMARY + decoration->tiles[(mapY - 1 - i) * mapX + j]) & METATILE_ATTR_LAYER_MASK;
+                layerType = GetLayerType(NUM_TILES_IN_PRIMARY + decoration->tiles[(mapY - 1 - i) * mapX + j]);
                 if (!IsFloorOrBoardAndHole(behaviorAt, decoration))
                     return FALSE;
 
@@ -1559,7 +1570,7 @@ static bool8 CanPlaceDecoration(u8 taskId, const struct Decoration *decoration)
             {
                 curX = gTasks[taskId].tCursorX + j;
                 behaviorAt = MapGridGetMetatileBehaviorAt(curX, curY);
-                layerType = GetMetatileAttributesById(NUM_TILES_IN_PRIMARY + decoration->tiles[(mapY - 1 - i) * mapX + j]) & METATILE_ATTR_LAYER_MASK;
+                layerType = GetLayerType(NUM_TILES_IN_PRIMARY + decoration->tiles[(mapY - 1 - i) * mapX + j]);
                 if (!MetatileBehavior_IsNormal(behaviorAt) && !IsSecretBaseTrainerSpot(behaviorAt, layerType))
                     return FALSE;
 
@@ -1576,7 +1587,7 @@ static bool8 CanPlaceDecoration(u8 taskId, const struct Decoration *decoration)
         {
             curX = gTasks[taskId].tCursorX + j;
             behaviorAt = MapGridGetMetatileBehaviorAt(curX, curY);
-            layerType = GetMetatileAttributesById(NUM_TILES_IN_PRIMARY + decoration->tiles[j]) & METATILE_ATTR_LAYER_MASK;
+            layerType = GetLayerType(NUM_TILES_IN_PRIMARY + decoration->tiles[j]);
             if (!MetatileBehavior_IsNormal(behaviorAt) && !MetatileBehavior_IsSecretBaseNorthWall(behaviorAt))
                 return FALSE;
 

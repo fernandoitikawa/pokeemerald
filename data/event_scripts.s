@@ -41,6 +41,7 @@
 #include "constants/moves.h"
 #include "constants/party_menu.h"
 #include "constants/pokemon.h"
+#include "constants/pokemon_size_record.h"
 #include "constants/roulette.h"
 #include "constants/script_menu.h"
 #include "constants/secret_bases.h"
@@ -87,6 +88,8 @@ gSpecialVars::
 	.4byte gSpecialVar_Unused_0x8014
 	.4byte gTrainerBattleOpponent_A
 
+	.purgem def_special
+	.set ALLOCATE_SPECIAL_TABLE, 1
 	.include "data/specials.inc"
 
 gStdScripts::
@@ -729,7 +732,6 @@ EventScript_RegionMap::
 	msgbox Common_Text_LookCloserAtMap, MSGBOX_DEFAULT
 	fadescreen FADE_TO_BLACK
 	special FieldShowRegionMap
-	waitstate
 	releaseall
 	end
 
@@ -787,7 +789,7 @@ EventScript_UnusedBoardFerry::
 	delay 30
 	applymovement LOCALID_PLAYER, Common_Movement_WalkInPlaceFasterUp
 	waitmovement 0
-	showobjectat LOCALID_PLAYER, 0
+	showplayer
 	delay 30
 	applymovement LOCALID_PLAYER, Movement_UnusedBoardFerry
 	waitmovement 0
@@ -802,7 +804,7 @@ Common_EventScript_FerryDepartIsland::
 	call_if_eq VAR_FACING, DIR_SOUTH, Ferry_EventScript_DepartIslandSouth
 	call_if_eq VAR_FACING, DIR_WEST, Ferry_EventScript_DepartIslandWest
 	delay 30
-	hideobjectat LOCALID_PLAYER, 0
+	hideplayer
 	call Common_EventScript_FerryDepart
 	return
 
@@ -812,7 +814,6 @@ Common_EventScript_FerryDepartIsland::
 Common_EventScript_NameReceivedPartyMon::
 	fadescreen FADE_TO_BLACK
 	special ChangePokemonNickname
-	waitstate
 	return
 
 Common_EventScript_PlayerHandedOverTheItem::

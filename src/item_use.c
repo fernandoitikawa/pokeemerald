@@ -72,7 +72,7 @@ static void SetDistanceOfClosestHiddenItem(u8, s16, s16);
 static void CB2_OpenPokeblockFromBag(void);
 
 // EWRAM variables
-EWRAM_DATA static void(*sItemUseOnFieldCB)(u8 taskId) = NULL;
+EWRAM_DATA static TaskFunc sItemUseOnFieldCB = NULL;
 
 // Below is set TRUE by UseRegisteredKeyItemOnField
 #define tUsingRegisteredKeyItem  data[3]
@@ -102,7 +102,7 @@ static void SetUpItemUseCallback(u8 taskId)
         type = gTasks[taskId].tEnigmaBerryType - 1;
     else
         type = GetItemType(gSpecialVar_ItemId) - 1;
-    if (!InBattlePyramid())
+    if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
     {
         gBagMenu->newScreenCallback = sItemUseCallbacks[type];
         Task_FadeAndCloseBagMenu(taskId);
@@ -144,7 +144,7 @@ static void DisplayCannotUseItemMessage(u8 taskId, bool8 isUsingRegisteredKeyIte
     StringExpandPlaceholders(gStringVar4, str);
     if (!isUsingRegisteredKeyItemOnField)
     {
-        if (!InBattlePyramid())
+        if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
             DisplayItemMessage(taskId, FONT_NORMAL, gStringVar4, CloseItemMessage);
         else
             DisplayItemMessageInBattlePyramid(taskId, gText_DadsAdvice, Task_CloseBattlePyramidBagMessage);
@@ -176,11 +176,11 @@ static void Task_CloseCantUseKeyItemMessage(u8 taskId)
 u8 CheckIfItemIsTMHMOrEvolutionStone(u16 itemId)
 {
     if (GetItemFieldFunc(itemId) == ItemUseOutOfBattle_TMHM)
-        return 1;
+        return ITEM_IS_TM_HM;
     else if (GetItemFieldFunc(itemId) == ItemUseOutOfBattle_EvolutionStone)
-        return 2;
+        return ITEM_IS_EVOLUTION_STONE;
     else
-        return 0;
+        return ITEM_IS_OTHER;
 }
 
 // Mail in the bag menu can't have a message but it can be checked (view the mail background, no message)
@@ -209,17 +209,14 @@ void ItemUseOutOfBattle_Bike(u8 taskId)
     {
         DisplayCannotDismountBikeMessage(taskId, tUsingRegisteredKeyItem);
     }
+    else if (Overworld_IsBikingAllowed() == TRUE && IsBikingDisallowedByPlayer() == 0)
+    {
+        sItemUseOnFieldCB = ItemUseOnFieldCB_Bike;
+        SetUpItemUseOnFieldCallback(taskId);
+    }
     else
     {
-        if (Overworld_IsBikingAllowed() == TRUE && IsBikingDisallowedByPlayer() == 0)
-        {
-            sItemUseOnFieldCB = ItemUseOnFieldCB_Bike;
-            SetUpItemUseOnFieldCallback(taskId);
-        }
-        else
-        {
-            DisplayDadsAdviceCannotUseItemMessage(taskId, tUsingRegisteredKeyItem);
-        }
+        DisplayDadsAdviceCannotUseItemMessage(taskId, tUsingRegisteredKeyItem);
     }
 }
 
@@ -353,7 +350,6 @@ static void Task_CloseItemfinderMessage(u8 taskId)
 
 static bool8 ItemfinderCheckForHiddenItems(const struct MapEvents *events, u8 taskId)
 {
-    int itemX, itemY;
     s16 playerX, playerY, i, distanceX, distanceY;
     PlayerGetDestCoords(&playerX, &playerY);
     gTasks[taskId].tItemFound = FALSE;
@@ -363,10 +359,8 @@ static bool8 ItemfinderCheckForHiddenItems(const struct MapEvents *events, u8 ta
         // Check if there are any hidden items on the current map that haven't been picked up
         if (events->bgEvents[i].kind == BG_EVENT_HIDDEN_ITEM && !FlagGet(events->bgEvents[i].bgUnion.hiddenItem.hiddenItemId + FLAG_HIDDEN_ITEMS_START))
         {
-            itemX = (u16)events->bgEvents[i].x + MAP_OFFSET;
-            distanceX = itemX - playerX;
-            itemY = (u16)events->bgEvents[i].y + MAP_OFFSET;
-            distanceY = itemY - playerY;
+            distanceX = events->bgEvents[i].x + MAP_OFFSET - playerX;
+            distanceY = events->bgEvents[i].y + MAP_OFFSET - playerY;
 
             // Player can see 7 metatiles on either side horizontally
             // and 5 metatiles on either side vertically
@@ -390,7 +384,7 @@ static bool8 IsHiddenItemPresentAtCoords(const struct MapEvents *events, s16 x, 
 
     for (i = 0; i < bgEventCount; i++)
     {
-        if (bgEvent[i].kind == BG_EVENT_HIDDEN_ITEM && x == (u16)bgEvent[i].x && y == (u16)bgEvent[i].y) // hidden item and coordinates matches x and y passed?
+        if (bgEvent[i].kind == BG_EVENT_HIDDEN_ITEM && x == bgEvent[i].x && y == bgEvent[i].y) // hidden item and coordinates matches x and y passed?
         {
             if (!FlagGet(bgEvent[i].bgUnion.hiddenItem.hiddenItemId + FLAG_HIDDEN_ITEMS_START))
                 return TRUE;
@@ -482,52 +476,47 @@ static void SetDistanceOfClosestHiddenItem(u8 taskId, s16 itemDistanceX, s16 ite
         tItemDistanceX = itemDistanceX;
         tItemDistanceY = itemDistanceY;
         tItemFound = TRUE;
+        return;
     }
+
+    // Other items have been found, check if this one is closer
+
+    // Get absolute x distance of the already-found item
+    if (tItemDistanceX < 0)
+        oldItemAbsX = tItemDistanceX * -1; // WEST
     else
+        oldItemAbsX = tItemDistanceX; // EAST
+
+    // Get absolute y distance of the already-found item
+    if (tItemDistanceY < 0)
+        oldItemAbsY = tItemDistanceY * -1; // NORTH
+    else
+        oldItemAbsY = tItemDistanceY; // SOUTH
+
+    // Get absolute x distance of the newly-found item
+    if (itemDistanceX < 0)
+        newItemAbsX = itemDistanceX * -1;
+    else
+        newItemAbsX = itemDistanceX;
+
+    // Get absolute y distance of the newly-found item
+    if (itemDistanceY < 0)
+        newItemAbsY = itemDistanceY * -1;
+    else
+        newItemAbsY = itemDistanceY;
+
+    if (oldItemAbsX + oldItemAbsY > newItemAbsX + newItemAbsY)
     {
-        // Other items have been found, check if this one is closer
-
-        // Get absolute x distance of the already-found item
-        if (tItemDistanceX < 0)
-            oldItemAbsX = tItemDistanceX * -1; // WEST
-        else
-            oldItemAbsX = tItemDistanceX;      // EAST
-
-        // Get absolute y distance of the already-found item
-        if (tItemDistanceY < 0)
-            oldItemAbsY = tItemDistanceY * -1; // NORTH
-        else
-            oldItemAbsY = tItemDistanceY;      // SOUTH
-
-        // Get absolute x distance of the newly-found item
-        if (itemDistanceX < 0)
-            newItemAbsX = itemDistanceX * -1;
-        else
-            newItemAbsX = itemDistanceX;
-
-        // Get absolute y distance of the newly-found item
-        if (itemDistanceY < 0)
-            newItemAbsY = itemDistanceY * -1;
-        else
-            newItemAbsY = itemDistanceY;
-
-
-        if (oldItemAbsX + oldItemAbsY > newItemAbsX + newItemAbsY)
-        {
-            // New item is closer
-            tItemDistanceX = itemDistanceX;
-            tItemDistanceY = itemDistanceY;
-        }
-        else
-        {
-            if (oldItemAbsX + oldItemAbsY == newItemAbsX + newItemAbsY
-            && (oldItemAbsY > newItemAbsY || (oldItemAbsY == newItemAbsY && tItemDistanceY < itemDistanceY)))
-            {
-                // If items are equal distance, use whichever is closer on the Y axis or further south
-                tItemDistanceX = itemDistanceX;
-                tItemDistanceY = itemDistanceY;
-            }
-        }
+        // New item is closer
+        tItemDistanceX = itemDistanceX;
+        tItemDistanceY = itemDistanceY;
+    }
+    else if (oldItemAbsX + oldItemAbsY == newItemAbsX + newItemAbsY
+          && (oldItemAbsY > newItemAbsY || (oldItemAbsY == newItemAbsY && tItemDistanceY < itemDistanceY)))
+    {
+        // If items are equal distance, use whichever is closer on the Y axis or further south
+        tItemDistanceX = itemDistanceX;
+        tItemDistanceY = itemDistanceY;
     }
 }
 
@@ -557,22 +546,22 @@ static u8 GetDirectionToHiddenItem(s16 itemDistanceX, s16 itemDistanceY)
         else
             return DIR_NORTH;
     }
+    else if (absX < absY)
+    {
+        if (itemDistanceY < 0)
+            return DIR_SOUTH;
+        else
+            return DIR_WEST;
+    }
+    else if (absX == absY)
+    {
+        if (itemDistanceY < 0)
+            return DIR_SOUTH;
+        else
+            return DIR_WEST;
+    }
     else
     {
-        if (absX < absY)
-        {
-            if (itemDistanceY < 0)
-                return DIR_SOUTH;
-            else
-                return DIR_WEST;
-        }
-        if (absX == absY)
-        {
-            if (itemDistanceY < 0)
-                return DIR_SOUTH;
-            else
-                return DIR_WEST;
-        }
         return DIR_NONE; // Unreachable
     }
 }
@@ -826,7 +815,7 @@ static void RemoveUsedItem(void)
     RemoveBagItem(gSpecialVar_ItemId, 1);
     CopyItemName(gSpecialVar_ItemId, gStringVar2);
     StringExpandPlaceholders(gStringVar4, gText_PlayerUsedVar2);
-    if (!InBattlePyramid())
+    if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
     {
         UpdatePocketItemList(GetItemPocket(gSpecialVar_ItemId));
         UpdatePocketListPosition(GetItemPocket(gSpecialVar_ItemId));
@@ -842,7 +831,7 @@ void ItemUseOutOfBattle_Repel(u8 taskId)
 {
     if (VarGet(VAR_REPEL_STEP_COUNT) == 0)
         gTasks[taskId].func = Task_StartUseRepel;
-    else if (!InBattlePyramid())
+    else if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
         DisplayItemMessage(taskId, FONT_NORMAL, gText_RepelEffectsLingered, CloseItemMessage);
     else
         DisplayItemMessageInBattlePyramid(taskId, gText_RepelEffectsLingered, Task_CloseBattlePyramidBagMessage);
@@ -866,7 +855,7 @@ static void Task_UseRepel(u8 taskId)
     {
         VarSet(VAR_REPEL_STEP_COUNT, GetItemHoldEffectParam(gSpecialVar_ItemId));
         RemoveUsedItem();
-        if (!InBattlePyramid())
+        if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
             DisplayItemMessage(taskId, FONT_NORMAL, gStringVar4, CloseItemMessage);
         else
             DisplayItemMessageInBattlePyramid(taskId, gStringVar4, Task_CloseBattlePyramidBagMessage);
@@ -878,7 +867,7 @@ static void Task_UsedBlackWhiteFlute(u8 taskId)
     if(++gTasks[taskId].data[8] > 7)
     {
         PlaySE(SE_GLASS_FLUTE);
-        if (!InBattlePyramid())
+        if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
             DisplayItemMessage(taskId, FONT_NORMAL, gStringVar4, CloseItemMessage);
         else
             DisplayItemMessageInBattlePyramid(taskId, gStringVar4, Task_CloseBattlePyramidBagMessage);
@@ -951,12 +940,12 @@ void ItemUseInBattle_PokeBall(u8 taskId)
     if (IsPlayerPartyAndPokemonStorageFull() == FALSE) // have room for mon?
     {
         RemoveBagItem(gSpecialVar_ItemId, 1);
-        if (!InBattlePyramid())
+        if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
             Task_FadeAndCloseBagMenu(taskId);
         else
             CloseBattlePyramidBag(taskId);
     }
-    else if (!InBattlePyramid())
+    else if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
     {
         DisplayItemMessage(taskId, FONT_NORMAL, gText_BoxFull, CloseItemMessage);
     }
@@ -970,7 +959,7 @@ static void Task_CloseStatIncreaseMessage(u8 taskId)
 {
     if (JOY_NEW(A_BUTTON | B_BUTTON))
     {
-        if (!InBattlePyramid())
+        if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
             Task_FadeAndCloseBagMenu(taskId);
         else
             CloseBattlePyramidBag(taskId);
@@ -983,7 +972,7 @@ static void Task_UseStatIncreaseItem(u8 taskId)
     {
         PlaySE(SE_USE_ITEM);
         RemoveBagItem(gSpecialVar_ItemId, 1);
-        if (!InBattlePyramid())
+        if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
             DisplayItemMessage(taskId, FONT_NORMAL, UseStatIncreaseItem(gSpecialVar_ItemId), Task_CloseStatIncreaseMessage);
         else
             DisplayItemMessageInBattlePyramid(taskId, UseStatIncreaseItem(gSpecialVar_ItemId), Task_CloseStatIncreaseMessage);
@@ -997,7 +986,7 @@ void ItemUseInBattle_StatIncrease(u8 taskId)
 
     if (ExecuteTableBasedItemEffect(&gPlayerParty[partyId], gSpecialVar_ItemId, partyId, 0) != FALSE)
     {
-        if (!InBattlePyramid())
+        if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
             DisplayItemMessage(taskId, FONT_NORMAL, gText_WontHaveEffect, CloseItemMessage);
         else
             DisplayItemMessageInBattlePyramid(taskId, gText_WontHaveEffect, Task_CloseBattlePyramidBagMessage);
@@ -1011,7 +1000,7 @@ void ItemUseInBattle_StatIncrease(u8 taskId)
 
 static void ItemUseInBattle_ShowPartyMenu(u8 taskId)
 {
-    if (!InBattlePyramid())
+    if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
     {
         gBagMenu->newScreenCallback = ChooseMonForInBattleItem;
         Task_FadeAndCloseBagMenu(taskId);
@@ -1049,7 +1038,7 @@ void ItemUseInBattle_Escape(u8 taskId)
     if((gBattleTypeFlags & BATTLE_TYPE_TRAINER) == FALSE)
     {
         RemoveUsedItem();
-        if (!InBattlePyramid())
+        if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
             DisplayItemMessage(taskId, FONT_NORMAL, gStringVar4, Task_FadeAndCloseBagMenu);
         else
             DisplayItemMessageInBattlePyramid(taskId, gStringVar4, CloseBattlePyramidBag);

@@ -365,7 +365,7 @@ static void HandleInputChooseTarget(void)
     {
         PlaySE(SE_SELECT);
         gSprites[gBattlerSpriteIds[gMultiUsePlayerCursor]].callback = SpriteCB_HideAsMoveTarget;
-        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 10, gMoveSelectionCursor[gActiveBattler] | (gMultiUsePlayerCursor << 8));
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, gMoveSelectionCursor[gActiveBattler] | (gMultiUsePlayerCursor << 8));
         EndBounceEffect(gMultiUsePlayerCursor, BOUNCE_HEALTHBOX);
         PlayerBufferExecCompleted();
     }
@@ -523,7 +523,7 @@ static void HandleInputChooseMove(void)
 
         if (!canSelectTarget)
         {
-            BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 10, gMoveSelectionCursor[gActiveBattler] | (gMultiUsePlayerCursor << 8));
+            BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, gMoveSelectionCursor[gActiveBattler] | (gMultiUsePlayerCursor << 8));
             PlayerBufferExecCompleted();
         }
         else
@@ -543,7 +543,7 @@ static void HandleInputChooseMove(void)
     else if (JOY_NEW(B_BUTTON) || gPlayerDpadHoldFrames > 59)
     {
         PlaySE(SE_SELECT);
-        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 10, 0xFFFF);
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, 0xFFFF);
         PlayerBufferExecCompleted();
     }
     else if (JOY_NEW(DPAD_LEFT))
@@ -1439,9 +1439,9 @@ static void PlayerHandleYesNoInput(void)
         PlaySE(SE_SELECT);
 
         if (gMultiUsePlayerCursor != 0)
-            BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 0xE, 0);
+            BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_UNK_14, 0);
         else
-            BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 0xD, 0);
+            BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_NOTHING_FAINTED, 0);
 
         PlayerBufferExecCompleted();
     }
@@ -2621,7 +2621,7 @@ static void PlayerChooseMoveInBattlePalace(void)
     if (--*(gBattleStruct->arenaMindPoints + gActiveBattler) == 0)
     {
         gBattlePalaceMoveSelectionRngValue = gRngValue;
-        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 10, ChooseMoveAndTargetInBattlePalace());
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, ChooseMoveAndTargetInBattlePalace());
         PlayerBufferExecCompleted();
     }
 }
@@ -2796,22 +2796,7 @@ static void PlayerHandleDMA3Transfer(void)
             | (gBattleBufferA[gActiveBattler][4] << 24);
     u16 sizeArg = gBattleBufferA[gActiveBattler][5] | (gBattleBufferA[gActiveBattler][6] << 8);
 
-    const u8 *src = &gBattleBufferA[gActiveBattler][7];
-    u8 *dst = (u8 *)(dstArg);
-    u32 size = sizeArg;
-
-    while (1)
-    {
-        if (size <= 0x1000)
-        {
-            DmaCopy16(3, src, dst, size);
-            break;
-        }
-        DmaCopy16(3, src, dst, 0x1000);
-        src += 0x1000;
-        dst += 0x1000;
-        size -= 0x1000;
-    }
+    DmaCopyLarge16(3, &gBattleBufferA[gActiveBattler][7], (void *)dstArg, sizeArg, 0x1000);
     PlayerBufferExecCompleted();
 }
 
@@ -2828,7 +2813,7 @@ static void PlayerHandleCmd32(void)
 
 static void PlayerHandleTwoReturnValues(void)
 {
-    BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 0, 0);
+    BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_USE_MOVE, 0);
     PlayerBufferExecCompleted();
 }
 

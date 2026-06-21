@@ -133,7 +133,7 @@ bool8 CheckBagHasItem(u16 itemId, u16 count)
 
     if (GetItemPocket(itemId) == 0)
         return FALSE;
-    if (InBattlePyramid() || FlagGet(FLAG_STORING_ITEMS_IN_PYRAMID_BAG) == TRUE)
+    if (CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE || FlagGet(FLAG_STORING_ITEMS_IN_PYRAMID_BAG) == TRUE)
         return CheckPyramidBagHasItem(itemId, count);
     pocket = GetItemPocket(itemId) - 1;
     // Check for item slots that contain the item
@@ -181,7 +181,7 @@ bool8 CheckBagHasSpace(u16 itemId, u16 count)
     if (GetItemPocket(itemId) == POCKET_NONE)
         return FALSE;
 
-    if (InBattlePyramid() || FlagGet(FLAG_STORING_ITEMS_IN_PYRAMID_BAG) == TRUE)
+    if (CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE || FlagGet(FLAG_STORING_ITEMS_IN_PYRAMID_BAG) == TRUE)
     {
         return CheckPyramidBagHasSpace(itemId, count);
     }
@@ -243,7 +243,7 @@ bool8 AddBagItem(u16 itemId, u16 count)
         return FALSE;
 
     // check Battle Pyramid Bag
-    if (InBattlePyramid() || FlagGet(FLAG_STORING_ITEMS_IN_PYRAMID_BAG) == TRUE)
+    if (CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE || FlagGet(FLAG_STORING_ITEMS_IN_PYRAMID_BAG) == TRUE)
     {
         return AddPyramidBagItem(itemId, count);
     }
@@ -351,7 +351,7 @@ bool8 RemoveBagItem(u16 itemId, u16 count)
         return FALSE;
 
     // check Battle Pyramid Bag
-    if (InBattlePyramid() || FlagGet(FLAG_STORING_ITEMS_IN_PYRAMID_BAG) == TRUE)
+    if (CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE || FlagGet(FLAG_STORING_ITEMS_IN_PYRAMID_BAG) == TRUE)
     {
         return RemovePyramidBagItem(itemId, count);
     }
@@ -632,30 +632,29 @@ void SortBerriesOrTMHMs(struct BagPocket *bagPocket)
     }
 }
 
-void MoveItemSlotInList(struct ItemSlot *itemSlots_, u32 from, u32 to_)
+void MoveItemSlotInList(struct ItemSlot *itemSlots, u32 from, u32 to)
 {
-    // dumb assignments needed to match
-    struct ItemSlot *itemSlots = itemSlots_;
-    u32 to = to_;
+    struct ItemSlot firstSlot;
+    s16 i;
 
-    if (from != to)
+    if (from == to)
+        return;
+
+    firstSlot = itemSlots[from];
+
+    if (to > from)
     {
-        s16 i, count;
-        struct ItemSlot firstSlot = itemSlots[from];
-
-        if (to > from)
-        {
-            to--;
-            for (i = from, count = to; i < count; i++)
-                itemSlots[i] = itemSlots[i + 1];
-        }
-        else
-        {
-            for (i = from, count = to; i > count; i--)
-                itemSlots[i] = itemSlots[i - 1];
-        }
-        itemSlots[to] = firstSlot;
+        to--;
+        for (i = (s16)from; i < (s16)to; i++)
+            itemSlots[i] = itemSlots[i + 1];
     }
+    else
+    {
+        for (i = (s16)from; i > (s16)to; i--)
+            itemSlots[i] = itemSlots[i - 1];
+    }
+    
+    itemSlots[to] = firstSlot;
 }
 
 void ClearBag(void)

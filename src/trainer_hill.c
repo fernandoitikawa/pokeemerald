@@ -197,7 +197,7 @@ static const u16 *const *const sPrizeListSets[] =
     sPrizeLists2
 };
 
-static const u16 sEReader_Pal[] = INCBIN_U16("graphics/trainer_hill/ereader.gbapal");
+static const u16 sEReader_Pal[] = INCGFX_U16("graphics/trainer_hill/ereader.pal", ".gbapal");
 static const u8 sRecordWinColors[] = {TEXT_COLOR_TRANSPARENT, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY};
 
 static const struct TrainerHillChallenge *const sChallengeData[NUM_TRAINER_HILL_MODES] =
@@ -250,7 +250,7 @@ static const u8 *const sModeStrings[NUM_TRAINER_HILL_MODES] =
 static const struct ObjectEventTemplate sTrainerObjectEventTemplate =
 {
     .graphicsId = OBJ_EVENT_GFX_RIVAL_BRENDAN_NORMAL,
-    .elevation = 3,
+    .elevation = ELEVATION_DEFAULT,
     .movementType = MOVEMENT_TYPE_LOOK_AROUND,
     .movementRangeX = 1,
     .movementRangeY = 1,
@@ -669,17 +669,17 @@ bool32 LoadTrainerHillFloorObjectEventScripts(void)
     return TRUE;
 }
 
-static u16 GetMetatileForFloor(u8 floorId, u32 x, u32 y, u32 floorWidth) // floorWidth is always 16
+static u16 GetMapDataForFloor(u8 floorId, u32 x, u32 y, u32 floorWidth) // floorWidth is always 16
 {
     bool8 impassable;
-    u16 metatile;
+    u16 metatileId;
     u16 elevation;
 
     impassable = (sHillData->floors[floorId].map.collisionData[y] >> (15 - x) & 1);
-    metatile = sHillData->floors[floorId].map.metatileData[floorWidth * y + x] + NUM_METATILES_IN_PRIMARY;
-    elevation = 3 << MAPGRID_ELEVATION_SHIFT;
+    metatileId = sHillData->floors[floorId].map.metatileData[floorWidth * y + x] + NUM_METATILES_IN_PRIMARY;
+    elevation = PACK_ELEVATION(ELEVATION_DEFAULT);
 
-    return ((impassable << MAPGRID_COLLISION_SHIFT) & MAPGRID_COLLISION_MASK) | elevation | (metatile & MAPGRID_METATILE_ID_MASK);
+    return PACK_COLLISION(impassable) | elevation | PACK_METATILE(metatileId);
 }
 
 void GenerateTrainerHillFloorLayout(u16 *mapArg)
@@ -724,7 +724,7 @@ void GenerateTrainerHillFloorLayout(u16 *mapArg)
     for (y = 0; y < HILL_FLOOR_HEIGHT_MAIN; y++)
     {
         for (x = 0; x < HILL_FLOOR_WIDTH; x++)
-            dst[x] = GetMetatileForFloor(mapId, x, y, HILL_FLOOR_WIDTH);
+            dst[x] = GetMapDataForFloor(mapId, x, y, HILL_FLOOR_WIDTH);
         dst += 31;
     }
 
